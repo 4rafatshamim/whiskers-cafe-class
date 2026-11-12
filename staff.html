@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <title>Staff | Whiskers Café</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="staff-page">
+    <p><a class="text-link" href="index.html">← Back to the café</a></p>
+    <h1>Staff corner 🐾</h1>
+
+    <section id="login-box" class="staff-box">
+      <h2>Log in</h2>
+      <form id="login-form" autocomplete="on">
+        <label for="u">Username</label>
+        <input id="u" type="text" autocomplete="username" required maxlength="30">
+        <label for="p">Password</label>
+        <input id="p" type="password" autocomplete="current-password" required maxlength="100">
+        <p><button class="button button-primary" type="submit">Log in</button></p>
+      </form>
+    </section>
+
+    <div id="panel" hidden>
+      <div class="staff-top"><p id="hello"></p><button class="text-link" id="logout" type="button">Log out</button></div>
+      <section class="staff-box">
+        <h2>Menu: tap to mark sold out</h2>
+        <div id="items"></div>
+      </section>
+      <section class="staff-box">
+        <h2>Recent orders</h2>
+        <div id="orders"></div>
+      </section>
+    </div>
+
+    <p id="msg" class="staff-msg" role="status" hidden></p>
+  </main>
+  <script src="config.js"></script>
+  <script src="staff.js"></script>
+</body>
+</html>

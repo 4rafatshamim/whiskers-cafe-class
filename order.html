@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Pre-order from Whiskers Café in Phagwara, Punjab and skip the queue.">
+  <title>Order ahead | Whiskers Café</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="Whiskers Café home">
+      <span class="brand-icon" aria-hidden="true">♡</span>
+      <span>Whiskers <em>Café</em></span>
+    </a>
+    <nav aria-label="Main navigation">
+      <a href="index.html#menu">Menu</a>
+      <a href="index.html#cats">Our cats</a>
+      <a href="index.html#about">About</a>
+      <a class="nav-button nav-order" href="order.html" aria-current="page" aria-label="Order ahead"><span class="cart-icon" aria-hidden="true">🛒</span><span class="cart-label">Order</span><span class="cart-count" data-cart-count hidden>0</span></a>
+      <a class="nav-button" href="index.html#visit">Visit us <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="order-hero section-wrap" aria-labelledby="order-title">
+      <p class="eyebrow"><span aria-hidden="true">✿</span> Skip the queue</p>
+      <h1 id="order-title">Order ahead,<br>then <span>walk right in.</span></h1>
+      <p class="hero-description">Pick your treats, tell us when you&rsquo;ll arrive, and place your pre-order. We&rsquo;ll have it ready. Pay when you pick up.</p>
+    </section>
+
+    <section class="order-layout section-wrap">
+      <section aria-labelledby="pick-title">
+        <h2 id="pick-title" class="order-heading">1. Pick your treats</h2>
+        <ul class="order-list">
+          <li class="order-item" data-id="latte" data-name="Cloud Cat Latte" data-price="180">
+            <span class="menu-illustration drink"><span aria-hidden="true">☕</span><img src="assets/images/menu/latte.jpg" alt="Cloud Cat Latte" width="600" height="450" loading="lazy"></span>
+            <div class="order-info">
+              <h3>Cloud Cat Latte</h3>
+              <p>Espresso, silky milk, and a little heart on top.</p>
+              <data class="price" value="180">₹180</data>
+            </div>
+            <span class="stepper" role="group" aria-label="Quantity for Cloud Cat Latte">
+              <button type="button" data-dec aria-label="Remove one Cloud Cat Latte">−</button>
+              <output>0</output>
+              <button type="button" data-inc aria-label="Add one Cloud Cat Latte">+</button>
+            </span>
+          </li>
+          <li class="order-item" data-id="strawberry-cake" data-name="Strawberry Daydream" data-price="220">
+            <span class="menu-illustration cake"><span aria-hidden="true">🍰</span><img src="assets/images/menu/strawberry-cake.jpg" alt="Strawberry Daydream" width="600" height="450" loading="lazy"></span>
+            <div class="order-info">
+              <h3>Strawberry Daydream</h3>
+              <p>Soft vanilla cake layered with fresh strawberry cream.</p>
+              <data class="price" value="220">₹220</data>
+            </div>
+            <span class="stepper" role="group" aria-label="Quantity for Strawberry Daydream">
+              <button type="button" data-dec aria-label="Remove one Strawberry Daydream">−</button>
+              <output>0</output>
+              <button type="button" data-inc aria-label="Add one Strawberry Daydream">+</button>
+            </span>
+          </li>
+          <li class="order-item" data-id="paw-cookies" data-name="Paw-print Cookies" data-price="120">
+            <span class="menu-illustration cookie"><span aria-hidden="true">🍪</span><img src="assets/images/menu/paw-cookies.jpg" alt="Paw-print Cookies" width="600" height="450" loading="lazy"></span>
+            <div class="order-info">
+              <h3>Paw-print Cookies</h3>
+              <p>Buttery little cookies baked fresh every morning.</p>
+              <data class="price" value="120">₹120</data>
+            </div>
+            <span class="stepper" role="group" aria-label="Quantity for Paw-print Cookies">
+              <button type="button" data-dec aria-label="Remove one Paw-print Cookies">−</button>
+              <output>0</output>
+              <button type="button" data-inc aria-label="Add one Paw-print Cookies">+</button>
+            </span>
+          </li>
+          <li class="order-item" data-id="matcha" data-name="Purrfect Matcha" data-price="190">
+            <span class="menu-illustration drink"><span aria-hidden="true">🍵</span><img src="assets/images/menu/matcha.jpg" alt="Purrfect Matcha" width="600" height="450" loading="lazy"></span>
+            <div class="order-info">
+              <h3>Purrfect Matcha</h3>
+              <p>Gentle matcha whisked with steamed milk and a soft foam cap.</p>
+              <data class="price" value="190">₹190</data>
+            </div>
+            <span class="stepper" role="group" aria-label="Quantity for Purrfect Matcha">
+              <button type="button" data-dec aria-label="Remove one Purrfect Matcha">−</button>
+              <output>0</output>
+              <button type="button" data-inc aria-label="Add one Purrfect Matcha">+</button>
+            </span>
+          </li>
+          <li class="order-item" data-id="mochi" data-name="Meowchi Bites" data-price="160">
+            <span class="menu-illustration cake"><span aria-hidden="true">🍡</span><img src="assets/images/menu/mochi.jpg" alt="Meowchi Bites" width="600" height="450" loading="lazy"></span>
+            <div class="order-info">
+              <h3>Meowchi Bites</h3>
+              <p>Chewy rice cakes with a sweet strawberry cream centre.</p>
+              <data class="price" value="160">₹160</data>
+            </div>
+            <span class="stepper" role="group" aria-label="Quantity for Meowchi Bites">
+              <button type="button" data-dec aria-label="Remove one Meowchi Bites">−</button>
+              <output>0</output>
+              <button type="button" data-inc aria-label="Add one Meowchi Bites">+</button>
+            </span>
+          </li>
+          <li class="order-item" data-id="waffles" data-name="Whisker Waffles" data-price="210">
+            <span class="menu-illustration cookie"><span aria-hidden="true">🧇</span><img src="assets/images/menu/waffles.jpg" alt="Whisker Waffles" width="600" height="450" loading="lazy"></span>
+            <div class="order-info">
+              <h3>Whisker Waffles</h3>
+              <p>Warm little waffles with berries and a drizzle of maple.</p>
+              <data class="price" value="210">₹210</data>
+            </div>
+            <span class="stepper" role="group" aria-label="Quantity for Whisker Waffles">
+              <button type="button" data-dec aria-label="Remove one Whisker Waffles">−</button>
+              <output>0</output>
+              <button type="button" data-inc aria-label="Add one Whisker Waffles">+</button>
+            </span>
+          </li>
+        </ul>
+      </section>
+
+      <section class="order-summary" aria-labelledby="summary-title">
+        <h2 id="summary-title" class="order-heading">2. Your order</h2>
+        <ul id="summary-list" class="summary-list"></ul>
+        <p id="summary-empty" class="summary-empty">Nothing here yet. Add something yummy 🍪</p>
+        <p class="total-row"><span>Total</span><data id="order-total" value="0">₹0</data></p>
+
+        <form id="order-form">
+          <label class="field"><span>Your name</span>
+            <input type="text" name="customer" required maxlength="40" placeholder="So we know whose latte it is">
+          </label>
+          <label class="field"><span>Mobile number</span>
+            <input type="tel" name="phone" required maxlength="15" placeholder="10 digits, so we can reach you">
+          </label>
+          <label class="field"><span>Pickup time today</span>
+            <input type="time" name="pickup" min="10:00" max="18:45" value="12:00" required>
+          </label>
+          <label class="field"><span>Notes <small>(optional)</small></span>
+            <textarea name="notes" rows="2" maxlength="200" placeholder="Oat milk? Extra sprinkles? Tell us."></textarea>
+          </label>
+          <p id="order-message" class="order-message" role="status" hidden></p>
+          <span class="order-actions">
+            <button class="button button-primary" type="submit" id="place-btn">Place pre-order <span aria-hidden="true">→</span></button>
+            <button class="button button-secondary" type="button" id="whatsapp-btn">Send on WhatsApp instead</button>
+            <button class="text-link clear-btn" type="button" id="clear-order">Clear order</button>
+          </span>
+          <pre id="order-preview" class="order-preview" hidden></pre>
+          <p class="order-fine">Payment is at pickup, in Phagwara, Punjab. Open 10 am to 7 pm, closed Mondays.</p>
+        </form>
+      </section>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <a class="brand" href="index.html"><span class="brand-icon" aria-hidden="true">♡</span><span>Whiskers <em>Café</em></span></a>
+    <p>Pre-orders are ready when you arrive. The cats are not responsible for stolen cookies.</p>
+    <small><a href="staff.html">Staff login</a> · © 2026 Whiskers Café · Not responsible for knocked-over drinks. The cat did it on purpose.</small>
+  </footer>
+  <script src="config.js"></script>
+  <script src="cat.js" defer></script>
+  <script src="cart.js" defer></script>
+</body>
+</html>

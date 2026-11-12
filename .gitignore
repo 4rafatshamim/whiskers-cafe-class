@@ -1,0 +1,7 @@
+.DS_Store
+Thumbs.db
+node_modules/
+.vercel/
+.env*
+Code-READY-TO-PASTE.gs
+staff-passwords.txt
