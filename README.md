@@ -20,7 +20,6 @@ double click `index.html`. keep all the files together in one folder or stuff br
 - `backend/Code.gs` the google apps script that talks to the google sheet, `backend/SETUP.md` the steps
 - `404.html` the "page not found" page, `favicon.svg` the tiny cat in the tab
 - `assets/` where photos and videos go
-- `PRESENTATION-CHEATSHEET.md` what to say in class + questions the teacher might ask
 
 ## before presenting (quick to-do)
 
