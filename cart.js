@@ -9,6 +9,7 @@ const CONFIG = window.WHISKERS_CONFIG || {};
 const WHATSAPP_NUMBER = CONFIG.whatsapp || '';
 const CAFE_NAME = CONFIG.name || 'Whiskers Café';
 const BACKEND_URL = CONFIG.backendUrl || '';     // the Google Apps Script link. Empty = WhatsApp-only mode
+const MAX_QTY = 10;
 
 // ---------- 2. THE CART ----------
 // The cart is just an object that says how many of each item we have.
@@ -16,11 +17,17 @@ const BACKEND_URL = CONFIG.backendUrl || '';     // the Google Apps Script link.
 let cart = {};
 let renderOrderPage = null;   // order.html fills this in, so other code can redraw that page
 
-// localStorage is a tiny notebook in the browser. It lets the cart survive
-// when you go from the menu page to the order page.
-// (try/catch = "if the browser blocks storage, just carry on without it")
+// Only restore known menu items with whole-number quantities from 1 to 10.
+const knownItemIds = new Set(Array.from(document.querySelectorAll('[data-add], .order-item[data-id]'))
+  .map(function (element) { return element.dataset.add || element.dataset.id; }));
 try {
-  cart = JSON.parse(localStorage.getItem('whiskers-cart')) || {};
+  const savedCart = JSON.parse(localStorage.getItem('whiskers-cart')) || {};
+  if (savedCart && typeof savedCart === 'object' && !Array.isArray(savedCart)) {
+    Object.keys(savedCart).forEach(function (id) {
+      const qty = savedCart[id];
+      if (knownItemIds.has(id) && Number.isInteger(qty) && qty >= 1 && qty <= MAX_QTY) cart[id] = qty;
+    });
+  }
 } catch (error) {
   cart = {};
 }
@@ -36,15 +43,16 @@ function saveCart() {
 // add up how many items are in the cart
 function countItems() {
   let total = 0;
-  for (const id in cart) {
-    total = total + cart[id];
-  }
+  Object.keys(cart).forEach(function (id) {
+    total += cart[id];
+  });
   return total;
 }
 
 // update the little number on the 🛒 in the menu bar
 function updateBadge() {
   const badge = document.querySelector('[data-cart-count]');
+  if (!badge) return;
   const count = countItems();
   badge.textContent = count;
   badge.hidden = count === 0;      // hide the badge when the cart is empty
@@ -52,19 +60,47 @@ function updateBadge() {
 
 // ---------- 3. "ADD TO ORDER" BUTTONS (index.html) ----------
 const addButtons = document.querySelectorAll('[data-add]');
+let menuAvailability = Object.create(null);
+let menuStatusReady = !BACKEND_URL;
+let menuStatusInFlight = false;
+
+function updateAddButton(button) {
+  const available = menuAvailability[button.dataset.add];
+  if (!menuStatusReady) {
+    button.disabled = true;
+    button.textContent = 'Checking availability…';
+  } else if (available === false) {
+    button.disabled = true;
+    button.textContent = 'Sold out today';
+  } else {
+    button.disabled = false;
+    button.textContent = button.dataset.label;
+  }
+}
 
 addButtons.forEach(function (button) {
-  button.dataset.label = button.textContent;     // remember the text, we need it if an item sells out and comes back
+  button.dataset.label = button.textContent.trim(); // keep the original label for stock changes
+  updateAddButton(button);
   button.addEventListener('click', function () {
-    const id = button.dataset.add;           // reads data-add="latte" from the HTML
-    cart[id] = (cart[id] || 0) + 1;          // +1 (start from 0 if it's not in the cart yet)
+    const id = button.dataset.add;
+    if (!knownItemIds.has(id)) return;
+    if (!menuStatusReady) return;               // don't allow clicks before the first stock check
+    if (menuAvailability[id] === false) {
+      updateAddButton(button);
+      return;
+    }
+    const oldText = button.dataset.label;
+    if ((cart[id] || 0) >= MAX_QTY) {
+      button.textContent = 'Limit: 10 per item';
+      setTimeout(function () { updateAddButton(button); }, 1100);
+      return;
+    }
+    cart[id] = (cart[id] || 0) + 1;
     saveCart();
     updateBadge();
 
-    // tiny "Added ♥" feedback for one second
-    const oldText = button.textContent;
     button.textContent = 'Added ♥';
-    setTimeout(function () { button.textContent = oldText; }, 1000);
+    setTimeout(function () { updateAddButton(button); }, 1000);
   });
 });
 
@@ -92,6 +128,8 @@ if (orderList) {                              // only run this part on order.htm
       const qty = cart[id] || 0;
 
       row.querySelector('output').textContent = qty;   // the number between − and +
+      row.querySelector('[data-dec]').disabled = qty === 0;
+      row.querySelector('[data-inc]').disabled = qty >= MAX_QTY || row.classList.contains('is-soldout') || (BACKEND_URL && !menuStatusReady);
 
       if (qty > 0) {
         total = total + qty * price;
@@ -110,7 +148,7 @@ if (orderList) {                              // only run this part on order.htm
     if (!button) return;
 
     const id = button.closest('.order-item').dataset.id;
-    if (button.hasAttribute('data-inc') && (cart[id] || 0) < 10) {
+    if (button.hasAttribute('data-inc') && (cart[id] || 0) < MAX_QTY && !button.disabled) {
       cart[id] = (cart[id] || 0) + 1;
     }
     if (button.hasAttribute('data-dec') && cart[id] > 0) {
@@ -171,9 +209,12 @@ if (orderList) {                              // only run this part on order.htm
     if (!BACKEND_URL) { sendOnWhatsApp(); return; }   // no backend set up: use WhatsApp instead
 
     const items = [];
-    for (const id in cart) items.push({ id: id, qty: cart[id] });   // only ids and quantities, never prices
+    for (const id in cart) items.push({ id: id, qty: cart[id] });   // the items array contains IDs and quantities, never prices
     const button = document.querySelector('#place-btn');
+    const originalButtonText = button.textContent;
     button.disabled = true;                      // stops accidental double clicks
+    button.textContent = 'Placing order…';
+    form.setAttribute('aria-busy', 'true');
     showMessage('Placing your order…', '');
 
     fetch(BACKEND_URL, {
@@ -187,7 +228,10 @@ if (orderList) {                              // only run this part on order.htm
         items: items
       })
     })
-      .then(function (response) { return response.json(); })
+      .then(function (response) {
+        if (!response.ok) throw new Error('The server returned an error.');
+        return response.json();
+      })
       .then(function (result) {
         if (result.ok) {
           cart = {};
@@ -200,9 +244,13 @@ if (orderList) {                              // only run this part on order.htm
         }
       })
       .catch(function () {
-        showMessage('Could not reach the server. Please use the WhatsApp button instead.', 'error');
+        showMessage('Could not reach the server. Your cart is still saved. Please try again or use the WhatsApp option.', 'error');
       })
-      .then(function () { button.disabled = false; });
+      .then(function () {
+        button.disabled = false;
+        button.textContent = originalButtonText;
+        form.removeAttribute('aria-busy');
+      });
   });
 
   // BACKUP WAY: open WhatsApp with the order text (also the only way if there is no backend)
@@ -229,30 +277,78 @@ if (orderList) {                              // only run this part on order.htm
 updateBadge();
 
 // ---------- 5. SOLD-OUT ITEMS (live from the Google Sheet) ----------
-// Staff mark an item "sold out" on staff.html. Here we ask the backend which items are available
-// and switch the buttons off for the sold-out ones. It re-checks every 60 seconds.
-function loadMenuStatus() {
-  if (!BACKEND_URL) return;                      // no backend = nothing to check
-  fetch(BACKEND_URL + '?action=menu')
-    .then(function (response) { return response.json(); })
-    .then(function (data) {
-      if (!data.ok) return;
-      data.items.forEach(function (item) {
-        const soldOut = !item.available;
-        document.querySelectorAll('[data-add="' + item.id + '"]').forEach(function (button) {
-          button.disabled = soldOut;
-          button.textContent = soldOut ? 'Sold out today' : button.dataset.label;
-        });
-        document.querySelectorAll('.order-item[data-id="' + item.id + '"]').forEach(function (row) {
-          row.classList.toggle('is-soldout', soldOut);
-          row.querySelectorAll('[data-inc]').forEach(function (b) { b.disabled = soldOut; });
-        });
-        if (soldOut && cart[item.id]) { delete cart[item.id]; saveCart(); }   // remove it from the cart
-      });
-      updateBadge();
-      if (renderOrderPage) renderOrderPage();
-    })
-    .catch(function () { /* backend unreachable: keep the page as it is */ });
+// Customer pages check availability on load, about every 12 seconds, and when
+// the visitor returns to the tab. The backend still validates every order.
+function applyMenuStatus(items) {
+  items.forEach(function (item) {
+    menuAvailability[item.id] = item.available === true;
+    const soldOut = !menuAvailability[item.id];
+
+    document.querySelectorAll('[data-add="' + item.id + '"]').forEach(function (button) {
+      updateAddButton(button);
+    });
+
+    document.querySelectorAll('.order-item[data-id="' + item.id + '"]').forEach(function (row) {
+      row.classList.toggle('is-soldout', soldOut);
+      const title = row.querySelector('.order-info h3');
+      if (!title) return;
+      let tag = title.querySelector('.soldout-tag');
+      if (soldOut && !tag) {
+        tag = document.createElement('span');
+        tag.className = 'soldout-tag';
+        tag.textContent = 'Sold out today';
+        title.appendChild(tag);
+      } else if (!soldOut && tag) {
+        tag.remove();
+      }
+    });
+
+    // Remove unavailable items from a saved cart. If staff restore an item later,
+    // the Add to Order button and quantity controls become available again.
+    if (soldOut && cart[item.id]) {
+      delete cart[item.id];
+      saveCart();
+    }
+  });
+
+  menuStatusReady = true;
+  addButtons.forEach(updateAddButton);
+  updateBadge();
+  if (renderOrderPage) renderOrderPage();
 }
+
+function loadMenuStatus() {
+  if (!BACKEND_URL || menuStatusInFlight) return Promise.resolve();
+  menuStatusInFlight = true;
+
+  const separator = BACKEND_URL.indexOf('?') === -1 ? '?' : '&';
+  const url = BACKEND_URL + separator + 'action=menu&_=' + Date.now();
+  return fetch(url, { cache: 'no-store' })
+    .then(function (response) {
+      if (!response.ok) throw new Error('Could not load menu availability.');
+      return response.json();
+    })
+    .then(function (data) {
+      if (!data || !data.ok || !Array.isArray(data.items)) throw new Error('Invalid menu response.');
+      applyMenuStatus(data.items);
+    })
+    .catch(function () {
+      // If the status endpoint is temporarily unavailable, let the page remain usable.
+      // The backend performs the authoritative stock check when an order is submitted.
+      if (!menuStatusReady) {
+        menuStatusReady = true;
+        addButtons.forEach(updateAddButton);
+        if (renderOrderPage) renderOrderPage();
+      }
+    })
+    .then(function () {
+      menuStatusInFlight = false;
+    });
+}
+
 loadMenuStatus();
-setInterval(loadMenuStatus, 60000);
+setInterval(loadMenuStatus, 12000);
+window.addEventListener('focus', loadMenuStatus);
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden) loadMenuStatus();
+});

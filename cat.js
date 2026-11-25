@@ -8,6 +8,24 @@
 // Some people turn on "reduce motion" in their settings. We respect that.
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+// Keep the existing photos and clips, but show the designed fallback if an asset fails.
+document.querySelectorAll('.menu-illustration img, .cat-avatar img, .staff-avatar img').forEach(function (img) {
+  function useFallback() {
+    img.hidden = true;
+    const fallback = img.parentElement.querySelector('.avatar-fallback');
+    if (fallback) fallback.hidden = false;
+  }
+  img.addEventListener('error', useFallback, { once: true });
+  if (img.complete && img.naturalWidth === 0) useFallback();
+});
+
+document.querySelectorAll('.video-frame video').forEach(function (video) {
+  const frame = video.closest('.video-frame');
+  video.addEventListener('error', function () { frame.classList.add('is-missing'); });
+  video.addEventListener('loadeddata', function () { frame.classList.remove('is-missing'); });
+});
+
+
 // ---------- 1. HEARTS ON CLICK ----------
 function makeHeart(x, y) {
   const heart = document.createElement('span');   // make a new <span>

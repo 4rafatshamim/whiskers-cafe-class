@@ -41,19 +41,19 @@ function doGet(e) {
   return json({ ok: true, service: 'whiskers' });
 }
 
-// POST = the website sends an order, or staff do something
+// POST = the website sends an order, or staff do something.
+// Do not lock every request: logins and read-only dashboard requests can run together.
+// Shared-sheet writes acquire a short lock inside placeOrder() or setCell().
 function doPost(e) {
-  var lock = LockService.getScriptLock();     // one request at a time, so two orders can't mix up the sheet
   try {
-    lock.waitLock(20000);
+    if (!e || !e.postData || !e.postData.contents) return json(fail('Request was empty.'));
     var data = JSON.parse(e.postData.contents);
     var action = String(data.action || 'order');
     if (action === 'order') return json(placeOrder(data));
     return json(staffAction(action, data));
   } catch (err) {
+    Logger.log('doPost error: ' + err);
     return json(fail('Something went wrong. Please try again or use WhatsApp.'));
-  } finally {
-    try { lock.releaseLock(); } catch (x) { /* not held */ }
   }
 }
 
@@ -65,7 +65,7 @@ function placeOrder(data) {
   var phone = String(data.phone || '').replace(/\D/g, '').slice(-10);
   if (!/^[6-9][0-9]{9}$/.test(phone)) return fail('Please enter a valid 10-digit mobile number.');
 
-  // is the café open? Is the pickup time allowed? (checked on the server, not just the browser)
+  // Check pickup time before acquiring the sheet lock.
   var now = new Date();
   var today = Utilities.formatDate(now, TIMEZONE, 'yyyy-MM-dd');
   var nowMins = toMins(Utilities.formatDate(now, TIMEZONE, 'HH:mm'));
@@ -75,30 +75,45 @@ function placeOrder(data) {
   var mins = toMins(time);
   if (mins < OPEN_MINS || mins > LAST_PICKUP_MINS) return fail('Pickup is between 10:00 and 18:45.');
   if (mins < nowMins + PREP_MINS) return fail('Please give us about ' + PREP_MINS + ' minutes. Pick a later time.');
-
-  // items: the browser sends ONLY ids and quantities. Prices come from the Menu sheet.
   if (!Array.isArray(data.items) || data.items.length < 1 || data.items.length > 20) return fail('Your order is empty.');
-  var menu = readMenu(), lines = [], total = 0;
-  for (var i = 0; i < data.items.length; i++) {
-    var item = findItem(menu, String(data.items[i].id));
-    var qty = Number(data.items[i].qty);
-    if (!item) return fail('One item is not on our menu any more. Please refresh the page.');
-    if (!item.available) return fail('Sorry, ' + item.name + ' is sold out today. Please remove it.');
-    if (!(qty >= 1 && qty <= MAX_QTY) || Math.floor(qty) !== qty) return fail('Please keep each item between 1 and ' + MAX_QTY + '.');
-    lines.push(qty + ' x ' + item.name);
-    total += qty * item.price;               // total is calculated HERE
+
+  var lock = LockService.getScriptLock();
+  var orderNumber = '';
+  var lines = [];
+  var total = 0;
+  try {
+    // Serialize only the availability check and order-row write. Staff availability
+    // changes use the same lock, so a sold-out item cannot slip through this check.
+    if (!lock.tryLock(10000)) return fail('The order system is busy. Please try again in a moment.');
+
+    var menu = readMenu();
+    for (var i = 0; i < data.items.length; i++) {
+      var item = findItem(menu, String(data.items[i].id));
+      var qty = Number(data.items[i].qty);
+      if (!item) return fail('One item is not on our menu any more. Please refresh the page.');
+      if (!item.available) return fail('Sorry, ' + item.name + ' is sold out today. Please remove it.');
+      if (!(qty >= 1 && qty <= MAX_QTY) || Math.floor(qty) !== qty) return fail('Please keep each item between 1 and ' + MAX_QTY + '.');
+      lines.push(qty + ' x ' + item.name);
+      total += qty * item.price;               // total is calculated on the server
+    }
+
+    var sheet = sheetByName('Orders');
+    orderNumber = 'W' + (1000 + sheet.getLastRow());
+    sheet.appendRow([Utilities.formatDate(now, TIMEZONE, 'yyyy-MM-dd HH:mm:ss'), Utilities.getUuid().slice(0, 8), orderNumber, 'New',
+                     name, phone, today, time, lines.join(', '), total, clean(data.notes, 200)]);
+  } catch (err) {
+    Logger.log('placeOrder error: ' + err);
+    return fail('Could not save the order. Please try again or use WhatsApp.');
+  } finally {
+    try { lock.releaseLock(); } catch (x) { /* lock was not acquired */ }
   }
 
-  // save the order as a new row
-  var sheet = sheetByName('Orders');
-  var orderNumber = 'W' + (1000 + sheet.getLastRow());
-  sheet.appendRow([Utilities.formatDate(now, TIMEZONE, 'yyyy-MM-dd HH:mm:ss'), Utilities.getUuid().slice(0, 8), orderNumber, 'New',
-                   name, phone, today, time, lines.join(', '), total, clean(data.notes, 200)]);
-
-  try {                                      // email the owner; if email fails the order is still saved
+  // Email can take several seconds. Send it AFTER releasing the sheet lock so it
+  // does not hold up staff logins, dashboard reads, or other sheet updates.
+  try {
     MailApp.sendEmail(OWNER_EMAIL, 'New pre-order ' + orderNumber + ' for ' + time,
       name + ' (' + phone + ')\nPickup today at ' + time + '\n' + lines.join('\n') + '\nTotal: Rs ' + total + ' (pay at pickup)');
-  } catch (mailError) { /* ignore */ }
+  } catch (mailError) { Logger.log('Order email failed: ' + mailError); }
 
   return { ok: true, orderNumber: orderNumber, total: total };
 }
@@ -106,8 +121,10 @@ function placeOrder(data) {
 // ---------- 3. STAFF ----------
 // Login gives a random token (a long secret string) that lasts 6 hours. Every staff action must send it back.
 function staffAction(action, data) {
+  data = data || {};
   if (action === 'staffLogin') return staffLogin(data);
 
+  if (!data.token) return { ok: false, code: 'AUTH', error: 'Please log in again.' };
   var user = CacheService.getScriptCache().get('sess_' + data.token);
   if (!user) return { ok: false, code: 'AUTH', error: 'Please log in again.' };
 
@@ -126,8 +143,12 @@ function staffLogin(data) {
   var cache = CacheService.getScriptCache();
   if (Number(cache.get('fails_' + username) || 0) >= 5) return fail('Too many wrong tries. Wait 15 minutes.');   // stops password guessing
 
-  var rows = sheetByName('Staff').getDataRange().getValues();     // columns: Username, Salt, Password hash, Display name
-  for (var i = 1; i < rows.length; i++) {
+  var staffSheet = sheetByName('Staff');
+  var lastRow = staffSheet.getLastRow();
+  if (lastRow < 2) return fail('No staff accounts are configured yet.');
+  // Read only the four account columns and skip the header row.
+  var rows = staffSheet.getRange(2, 1, lastRow - 1, 4).getValues();
+  for (var i = 0; i < rows.length; i++) {
     if (username && String(rows[i][0]).toLowerCase() === username &&
         hash(String(rows[i][1]), String(data.password || '')) === String(rows[i][2])) {
       var token = Utilities.getUuid() + Utilities.getUuid();
@@ -160,14 +181,26 @@ function sheetByName(name) {
 
 // Find the row whose column `keyCol` equals `key` and write `value` into column `valueCol`.
 function setCell(sheetName, keyCol, key, valueCol, value) {
-  var sh = sheetByName(sheetName), last = sh.getLastRow();
-  if (last < 2) return fail('Not found.');
-  var from = Math.max(2, last - 299);                                   // look at the latest 300 rows
-  var keys = sh.getRange(from, keyCol, last - from + 1, 1).getValues();
-  for (var i = keys.length - 1; i >= 0; i--) {
-    if (String(keys[i][0]).trim() === key) { sh.getRange(from + i, valueCol).setValue(value); return { ok: true }; }
+  var lock = LockService.getScriptLock();
+  try {
+    if (!lock.tryLock(10000)) return fail('The system is busy. Please try again in a moment.');
+    var sh = sheetByName(sheetName), last = sh.getLastRow();
+    if (last < 2) return fail('Not found.');
+    var from = Math.max(2, last - 299);                                   // look at the latest 300 rows
+    var keys = sh.getRange(from, keyCol, last - from + 1, 1).getValues();
+    for (var i = keys.length - 1; i >= 0; i--) {
+      if (String(keys[i][0]).trim() === key) {
+        sh.getRange(from + i, valueCol).setValue(value);
+        return { ok: true };
+      }
+    }
+    return fail('Not found.');
+  } catch (err) {
+    Logger.log('setCell error: ' + err);
+    return fail('Could not save that change. Please try again.');
+  } finally {
+    try { lock.releaseLock(); } catch (x) { /* lock was not acquired */ }
   }
-  return fail('Not found.');
 }
 
 function readMenu() {
@@ -213,7 +246,7 @@ function createStaffAccounts() {
   if (sh.getLastRow() < 1) sh.getRange(1, 1, 1, 4).setValues([['Username', 'Salt', 'Password hash', 'Display name']]).setFontWeight('bold');
   sh.getRange('B:C').setNumberFormat('@');
   people.forEach(function (p) {
-    if (/^CHANGE-ME/.test(p[1])) throw new Error('Put real passwords in first (8+ characters).');
+    if (/^CHANGE-ME/.test(p[1]) || String(p[1]).length < 8) throw new Error('Put real passwords in first (at least 8 characters).');
     var salt = Utilities.getUuid(), row = [p[0], salt, hash(salt, p[1]), p[2]], at = 0, rows = sh.getDataRange().getValues();
     for (var i = 1; i < rows.length; i++) if (String(rows[i][0]).toLowerCase() === p[0]) at = i + 1;
     sh.getRange(at || sh.getLastRow() + 1, 1, 1, 4).setValues([row]);

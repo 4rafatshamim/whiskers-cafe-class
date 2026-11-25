@@ -1,0 +1,188 @@
+[1mdiff --git a/backend/Code.gs b/backend/Code.gs[m
+[1mindex ea6cb1c..5c4bd7d 100644[m
+[1m--- a/backend/Code.gs[m
+[1m+++ b/backend/Code.gs[m
+[36m@@ -41,19 +41,19 @@[m [mfunction doGet(e) {[m
+   return json({ ok: true, service: 'whiskers' });[m
+ }[m
+ [m
+[31m-// POST = the website sends an order, or staff do something[m
+[32m+[m[32m// POST = the website sends an order, or staff do something.[m
+[32m+[m[32m// Do not lock every request: logins and read-only dashboard requests can run together.[m
+[32m+[m[32m// Shared-sheet writes acquire a short lock inside placeOrder() or setCell().[m
+ function doPost(e) {[m
+[31m-  var lock = LockService.getScriptLock();     // one request at a time, so two orders can't mix up the sheet[m
+   try {[m
+[31m-    lock.waitLock(20000);[m
+[32m+[m[32m    if (!e || !e.postData || !e.postData.contents) return json(fail('Request was empty.'));[m
+     var data = JSON.parse(e.postData.contents);[m
+     var action = String(data.action || 'order');[m
+     if (action === 'order') return json(placeOrder(data));[m
+     return json(staffAction(action, data));[m
+   } catch (err) {[m
+[32m+[m[32m    Logger.log('doPost error: ' + err);[m
+     return json(fail('Something went wrong. Please try again or use WhatsApp.'));[m
+[31m-  } finally {[m
+[31m-    try { lock.releaseLock(); } catch (x) { /* not held */ }[m
+   }[m
+ }[m
+ [m
+[36m@@ -65,7 +65,7 @@[m [mfunction placeOrder(data) {[m
+   var phone = String(data.phone || '').replace(/\D/g, '').slice(-10);[m
+   if (!/^[6-9][0-9]{9}$/.test(phone)) return fail('Please enter a valid 10-digit mobile number.');[m
+ [m
+[31m-  // is the café open? Is the pickup time allowed? (checked on the server, not just the browser)[m
+[32m+[m[32m  // Check pickup time before acquiring the sheet lock.[m
+   var now = new Date();[m
+   var today = Utilities.formatDate(now, TIMEZONE, 'yyyy-MM-dd');[m
+   var nowMins = toMins(Utilities.formatDate(now, TIMEZONE, 'HH:mm'));[m
+[36m@@ -75,30 +75,45 @@[m [mfunction placeOrder(data) {[m
+   var mins = toMins(time);[m
+   if (mins < OPEN_MINS || mins > LAST_PICKUP_MINS) return fail('Pickup is between 10:00 and 18:45.');[m
+   if (mins < nowMins + PREP_MINS) return fail('Please give us about ' + PREP_MINS + ' minutes. Pick a later time.');[m
+[31m-[m
+[31m-  // items: the browser sends ONLY ids and quantities. Prices come from the Menu sheet.[m
+   if (!Array.isArray(data.items) || data.items.length < 1 || data.items.length > 20) return fail('Your order is empty.');[m
+[31m-  var menu = readMenu(), lines = [], total = 0;[m
+[31m-  for (var i = 0; i < data.items.length; i++) {[m
+[31m-    var item = findItem(menu, String(data.items[i].id));[m
+[31m-    var qty = Number(data.items[i].qty);[m
+[31m-    if (!item) return fail('One item is not on our menu any more. Please refresh the page.');[m
+[31m-    if (!item.available) return fail('Sorry, ' + item.name + ' is sold out today. Please remove it.');[m
+[31m-    if (!(qty >= 1 && qty <= MAX_QTY) || Math.floor(qty) !== qty) return fail('Please keep each item between 1 and ' + MAX_QTY + '.');[m
+[31m-    lines.push(qty + ' x ' + item.name);[m
+[31m-    total += qty * item.price;               // total is calculated HERE[m
+[31m-  }[m
+ [m
+[31m-  // save the order as a new row[m
+[31m-  var sheet = sheetByName('Orders');[m
+[31m-  var orderNumber = 'W' + (1000 + sheet.getLastRow());[m
+[31m-  sheet.appendRow([Utilities.formatDate(now, TIMEZONE, 'yyyy-MM-dd HH:mm:ss'), Utilities.getUuid().slice(0, 8), orderNumber, 'New',[m
+[31m-                   name, phone, today, time, lines.join(', '), total, clean(data.notes, 200)]);[m
+[32m+[m[32m  var lock = LockService.getScriptLock();[m
+[32m+[m[32m  var orderNumber = '';[m
+[32m+[m[32m  var lines = [];[m
+[32m+[m[32m  var total = 0;[m
+[32m+[m[32m  try {[m
+[32m+[m[32m    // Serialize only the availability check and order-row write. Staff availability[m
+[32m+[m[32m    // changes use the same lock, so a sold-out item cannot slip through this check.[m
+[32m+[m[32m    if (!lock.tryLock(10000)) return fail('The order system is busy. Please try again in a moment.');[m
+[32m+[m
+[32m+[m[32m    var menu = readMenu();[m
+[32m+[m[32m    for (var i = 0; i < data.items.length; i++) {[m
+[32m+[m[32m      var item = findItem(menu, String(data.items[i].id));[m
+[32m+[m[32m      var qty = Number(data.items[i].qty);[m
+[32m+[m[32m      if (!item) return fail('One item is not on our menu any more. Please refresh the page.');[m
+[32m+[m[32m      if (!item.available) return fail('Sorry, ' + item.name + ' is sold out today. Please remove it.');[m
+[32m+[m[32m      if (!(qty >= 1 && qty <= MAX_QTY) || Math.floor(qty) !== qty) return fail('Please keep each item between 1 and ' + MAX_QTY + '.');[m
+[32m+[m[32m      lines.push(qty + ' x ' + item.name);[m
+[32m+[m[32m      total += qty * item.price;               // total is calculated on the server[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    var sheet = sheetByName('Orders');[m
+[32m+[m[32m    orderNumber = 'W' + (1000 + sheet.getLastRow());[m
+[32m+[m[32m    sheet.appendRow([Utilities.formatDate(now, TIMEZONE, 'yyyy-MM-dd HH:mm:ss'), Utilities.getUuid().slice(0, 8), orderNumber, 'New',[m
+[32m+[m[32m                     name, phone, today, time, lines.join(', '), total, clean(data.notes, 200)]);[m
+[32m+[m[32m  } catch (err) {[m
+[32m+[m[32m    Logger.log('placeOrder error: ' + err);[m
+[32m+[m[32m    return fail('Could not save the order. Please try again or use WhatsApp.');[m
+[32m+[m[32m  } finally {[m
+[32m+[m[32m    try { lock.releaseLock(); } catch (x) { /* lock was not acquired */ }[m
+[32m+[m[32m  }[m
+ [m
+[31m-  try {                                      // email the owner; if email fails the order is still saved[m
+[32m+[m[32m  // Email can take several seconds. Send it AFTER releasing the sheet lock so it[m
+[32m+[m[32m  // does not hold up staff logins, dashboard reads, or other sheet updates.[m
+[32m+[m[32m  try {[m
+     MailApp.sendEmail(OWNER_EMAIL, 'New pre-order ' + orderNumber + ' for ' + time,[m
+       name + ' (' + phone + ')\nPickup today at ' + time + '\n' + lines.join('\n') + '\nTotal: Rs ' + total + ' (pay at pickup)');[m
+[31m-  } catch (mailError) { /* ignore */ }[m
+[32m+[m[32m  } catch (mailError) { Logger.log('Order email failed: ' + mailError); }[m
+ [m
+   return { ok: true, orderNumber: orderNumber, total: total };[m
+ }[m
+[36m@@ -106,8 +121,10 @@[m [mfunction placeOrder(data) {[m
+ // ---------- 3. STAFF ----------[m
+ // Login gives a random token (a long secret string) that lasts 6 hours. Every staff action must send it back.[m
+ function staffAction(action, data) {[m
+[32m+[m[32m  data = data || {};[m
+   if (action === 'staffLogin') return staffLogin(data);[m
+ [m
+[32m+[m[32m  if (!data.token) return { ok: false, code: 'AUTH', error: 'Please log in again.' };[m
+   var user = CacheService.getScriptCache().get('sess_' + data.token);[m
+   if (!user) return { ok: false, code: 'AUTH', error: 'Please log in again.' };[m
+ [m
+[36m@@ -126,8 +143,12 @@[m [mfunction staffLogin(data) {[m
+   var cache = CacheService.getScriptCache();[m
+   if (Number(cache.get('fails_' + username) || 0) >= 5) return fail('Too many wrong tries. Wait 15 minutes.');   // stops password guessing[m
+ [m
+[31m-  var rows = sheetByName('Staff').getDataRange().getValues();     // columns: Username, Salt, Password hash, Display name[m
+[31m-  for (var i = 1; i < rows.length; i++) {[m
+[32m+[m[32m  var staffSheet = sheetByName('Staff');[m
+[32m+[m[32m  var lastRow = staffSheet.getLastRow();[m
+[32m+[m[32m  if (lastRow < 2) return fail('No staff accounts are configured yet.');[m
+[32m+[m[32m  // Read only the four account columns and skip the header row.[m
+[32m+[m[32m  var rows = staffSheet.getRange(2, 1, lastRow - 1, 4).getValues();[m
+[32m+[m[32m  for (var i = 0; i < rows.length; i++) {[m
+     if (username && String(rows[i][0]).toLowerCase() === username &&[m
+         hash(String(rows[i][1]), String(data.password || '')) === String(rows[i][2])) {[m
+       var token = Utilities.getUuid() + Utilities.getUuid();[m
+[36m@@ -160,14 +181,26 @@[m [mfunction sheetByName(name) {[m
+ [m
+ // Find the row whose column `keyCol` equals `key` and write `value` into column `valueCol`.[m
+ function setCell(sheetName, keyCol, key, valueCol, value) {[m
+[31m-  var sh = sheetByName(sheetName), last = sh.getLastRow();[m
+[31m-  if (last < 2) return fail('Not found.');[m
+[31m-  var from = Math.max(2, last - 299);                                   // look at the latest 300 rows[m
+[31m-  var keys = sh.getRange(from, keyCol, last - from + 1, 1).getValues();[m
+[31m-  for (var i = keys.length - 1; i >= 0; i--) {[m
+[31m-    if (String(keys[i][0]).trim() === key) { sh.getRange(from + i, valueCol).setValue(value); return { ok: true }; }[m
+[32m+[m[32m  var lock = LockService.getScriptLock();[m
+[32m+[m[32m  try {[m
+[32m+[m[32m    if (!lock.tryLock(10000)) return fail('The system is busy. Please try again in a moment.');[m
+[32m+[m[32m    var sh = sheetByName(sheetName), last = sh.getLastRow();[m
+[32m+[m[32m    if (last < 2) return fail('Not found.');[m
+[32m+[m[32m    var from = Math.max(2, last - 299);                                   // look at the latest 300 rows[m
+[32m+[m[32m    var keys = sh.getRange(from, keyCol, last - from + 1, 1).getValues();[m
+[32m+[m[32m    for (var i = keys.length - 1; i >= 0; i--) {[m
+[32m+[m[32m      if (String(keys[i][0]).trim() === key) {[m
+[32m+[m[32m        sh.getRange(from + i, valueCol).setValue(value);[m
+[32m+[m[32m        return { ok: true };[m
+[32m+[m[32m      }[m
+[32m+[m[32m    }[m
+[32m+[m[32m    return fail('Not found.');[m
+[32m+[m[32m  } catch (err) {[m
+[32m+[m[32m    Logger.log('setCell error: ' + err);[m
+[32m+[m[32m    return fail('Could not save that change. Please try again.');[m
+[32m+[m[32m  } finally {[m
+[32m+[m[32m    try { lock.releaseLock(); } catch (x) { /* lock was not acquired */ }[m
+   }[m
+[31m-  return fail('Not found.');[m
+ }[m
+ [m
+ function readMenu() {[m
+[36m@@ -213,7 +246,7 @@[m [mfunction createStaffAccounts() {[m
+   if (sh.getLastRow() < 1) sh.getRange(1, 1, 1, 4).setValues([['Username', 'Salt', 'Password hash', 'Display name']]).setFontWeight('bold');[m
+   sh.getRange('B:C').setNumberFormat('@');[m
+   people.forEach(function (p) {[m
+[31m-    if (/^CHANGE-ME/.test(p[1])) throw new Error('Put real passwords in first (8+ characters).');[m
+[32m+[m[32m    if (/^CHANGE-ME/.test(p[1]) || String(p[1]).length < 8) throw new Error('Put real passwords in first (at least 8 characters).');[m
+     var salt = Utilities.getUuid(), row = [p[0], salt, hash(salt, p[1]), p[2]], at = 0, rows = sh.getDataRange().getValues();[m
+     for (var i = 1; i < rows.length; i++) if (String(rows[i][0]).toLowerCase() === p[0]) at = i + 1;[m
+     sh.getRange(at || sh.getLastRow() + 1, 1, 1, 4).setValues([row]);[m
+[1mdiff --git a/config.js b/config.js[m
+[1mindex 58820fb..0eef3dc 100644[m
+[1m--- a/config.js[m
+[1m+++ b/config.js[m
+[36m@@ -2,5 +2,10 @@[m
+ window.WHISKERS_CONFIG = {[m
+   name: 'Whiskers Café',[m
+   whatsapp: '918944937861',   // country code + number, no + or spaces. Empty = hide the WhatsApp button[m
+[31m-  backendUrl: 'https://script.google.com/macros/s/AKfycbwVs-kapdQlbltfSzbglajrYudM4JR9ZAMv5YMbDW9TjRmiXYcMaOnXUFOa48ESy2h8aw/exec'   // the Google Apps Script link (see backend/SETUP.md)[m
+[32m+[m[32m  backendUrl: 'https://script.google.com/macros/s/AKfycbzqssdizN0OBIGTBLxFscxuxDGHApZF0Wn73p6JvP4YNB1XQFV_SA4KTDFEP5vdh2eGuA/exec', // the Google Apps Script link (see backend/SETUP.md)[m
+[32m+[m[32m  staffPhotos: {[m
+[32m+[m[32m    saurav: 'assets/images/staff/saurav.jpg',[m
+[32m+[m[32m    arafat: 'assets/images/staff/arafat.jpg',[m
+[32m+[m[32m    varun: 'assets/images/staff/varun.jpg'[m
+[32m+[m[32m  }[m
+ };[m

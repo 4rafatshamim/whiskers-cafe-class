@@ -99,11 +99,10 @@ h1 span { color: var(--berry); }
 .cat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 .cat-card { padding: 23px; border-radius: 20px; background: var(--white); text-align: center; }
 .cat-avatar { position: relative; overflow: hidden; width: 124px; height: 124px; display: grid; place-items: center; margin: 0 auto 17px; border-radius: 50%; }
+.cat-avatar .avatar-fallback { position: relative; z-index: 1; color: var(--berry); font-size: 2.4rem; font-weight: 800; }
+
 .avatar-butter { background: #f8ecc9; }.avatar-sky { background: #d9e8f3; }.avatar-blush { background: #f6d6dd; }
 .avatar-peach { background: #f8dfd3; }.avatar-lilac { background: #e8def1; }.avatar-mint { background: #deead8; }
-.avatar-ears { position: absolute; top: 13px; width: 70px; height: 54px; border-radius: 42% 42% 10% 10%; background: #fff8ef; clip-path: polygon(0 0, 42% 25%, 50% 0, 100% 0, 83% 100%, 16% 100%); }
-.avatar-eyes { position: absolute; top: 49px; z-index: 1; font-size: .8rem; font-weight: 900; letter-spacing: 4px; }
-.avatar-nose { position: absolute; top: 59px; z-index: 1; font-size: .9rem; }
 .cat-card h3 { margin-bottom: 3px; }.cat-card p { margin-bottom: 12px; color: var(--muted); font-size: .83rem; }
 .cat-tag { display: inline-block; padding: 6px 11px; border-radius: 99px; background: var(--pink-light); color: var(--berry); font-size: .7rem; font-weight: 800; }
 
@@ -268,6 +267,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .staff-card { padding: 26px 22px; border: 1px solid #59443e0d; border-radius: 22px; background: var(--white); box-shadow: 0 12px 30px #59443e09; text-align: center; }
 .staff-avatar { position: relative; overflow: hidden; display: grid; place-items: center; width: 96px; height: 96px; margin: 0 auto 14px; border-radius: 50%; color: var(--berry); font-size: 2.2rem; font-weight: 800; }
 .staff-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.staff-avatar img[hidden], .avatar-fallback[hidden] { display: none !important; }
 .staff-card h4 { margin: 0 0 6px; font-size: 1.15rem; }
 .staff-role { display: inline-block; margin-bottom: 12px; padding: 5px 11px; border-radius: 99px; background: var(--pink-light); color: var(--berry); font-size: .7rem; font-weight: 800; }
 .staff-story { margin: 0; color: var(--muted); font-size: .85rem; }

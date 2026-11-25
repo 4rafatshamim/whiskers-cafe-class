@@ -1,7 +1,18 @@
+# Operating-system files
 .DS_Store
 Thumbs.db
+
+# Local tooling and dependencies
 node_modules/
 .vercel/
-.env*
-Code-READY-TO-PASTE.gs
+
+# Local environment files and secrets
+.env
+.env.*
+!.env.example
 staff-passwords.txt
+Code-READY-TO-PASTE.gs
+
+# Logs and temporary files
+*.log
+*.tmp
