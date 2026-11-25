@@ -88,3 +88,5 @@ The front end can be hosted on Vercel, Netlify or GitHub Pages. The Google Apps 
 ## Photo credits
 
 The three staff portraits were supplied by the team for this class project. Add source and licence details for the cat and menu photographs here, and check their usage terms before publishing the site; an image being available online does not automatically mean it is free to reuse.
+
+Production deployments are triggered automatically when changes are pushed to the main branch through Vercel.
